@@ -1,3 +1,21 @@
+# Setup
+
+## Anaconda first time setup
+```
+conda env create -f environment.yml
+conda activate nerf
+```
+
+### Updating existing
+```
+conda env export > environment.yaml
+conda env update --file environment.yaml --prune
+```
+
+
+
+
+
 # Resources
 
 
