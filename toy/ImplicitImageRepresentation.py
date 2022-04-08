@@ -7,6 +7,7 @@ from torchvision.transforms import PILToTensor, CenterCrop, Resize
 import matplotlib.pyplot as plt
 from einops import rearrange
 import re
+torch.pi = torch.acos(torch.zeros(1)).item() * 2
 
 def block(in_neurons, out_neurons, activation_fn):
     return nn.Sequential(
@@ -14,8 +15,11 @@ def block(in_neurons, out_neurons, activation_fn):
         activation_fn()
     )
 
-def pos_encoding(x):
-    return torch.cat([torch.sin(10*x),torch.sin(100*x),torch.sin(150*x), torch.sin(450*x), torch.sin(2*x)], dim=1)
+def sine_embedding(x, num_basis=5):
+    return torch.cat([torch.sin((2**i)*x) for i in range(num_basis)], dim=1)
+
+def replicate_inputs_sanity_check(x, num_basis=5):
+    return torch.cat([x for i in range(num_basis)], dim=1)
 
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
@@ -37,7 +41,7 @@ class MLP(torch.nn.Module):
         return self.net(self.preprocess_fn(x))
 
 def get_imgs(image_paths):
-    l = [Resize(130)
+    l = [Resize(30)
         (CenterCrop(250)
         (PILToTensor()
         (Image.open(path).convert('RGB')))) for path in image_paths]
@@ -62,7 +66,8 @@ def main():
                 MLP(nn.ReLU,    layers, name='ReLU',          preprocess_fn=nn.Identity()).cuda(), 
                 MLP(nn.Sigmoid, layers, name='Sigmoid',       preprocess_fn=nn.Identity()).cuda(),
                 MLP(nn.Tanh,    layers, name='Tanh',          preprocess_fn=nn.Identity()).cuda(),
-                MLP(nn.ReLU,    pelyer, name='ReLU Pos.Embd', preprocess_fn=pos_encoding).cuda(),
+                MLP(nn.ReLU,    pelyer, name='ReLU Pos.Embd', preprocess_fn=sine_embedding).cuda(),
+                MLP(nn.ReLU,    pelyer, name='ReLU Replicate', preprocess_fn=replicate_inputs_sanity_check).cuda(),
             ]
     optimizers = [optim.AdamW(m.parameters(), lr=3e-3) for m in models]
 
