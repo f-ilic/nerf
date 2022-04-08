@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from einops import rearrange
 import re
 
-
 def block(in_neurons, out_neurons, activation_fn):
     return nn.Sequential(
         nn.Linear(in_neurons, out_neurons),
@@ -16,7 +15,7 @@ def block(in_neurons, out_neurons, activation_fn):
     )
 
 def pos_encoding(x):
-    return torch.sin(10*x)
+    return torch.cat([torch.sin(10*x),torch.sin(100*x),torch.sin(150*x), torch.sin(450*x), torch.sin(2*x)], dim=1)
 
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
@@ -25,20 +24,20 @@ def pairwise(iterable):
     return zip(a, b)
 
 class MLP(torch.nn.Module):
-    def __init__(self, activation_fn, neurons) -> None:
+    def __init__(self, activation_fn, neurons, name, preprocess_fn) -> None:
         torch.manual_seed(69)
         super(MLP, self).__init__()
-        regex = re.compile('[^a-zA-Z]')
-        self.name = regex.sub('', str(activation_fn).split(".")[-1])
         self.activation_fn = activation_fn
         self.neurons = neurons
+        self.name = name
+        self.preprocess_fn = preprocess_fn
         self.net = nn.Sequential(*[block(i,o,self.activation_fn) for i,o in pairwise(self.neurons)])    
 
     def forward(self, x):
-        return self.net(x)
+        return self.net(self.preprocess_fn(x))
 
 def get_imgs(image_paths):
-    l = [Resize(30)
+    l = [Resize(130)
         (CenterCrop(250)
         (PILToTensor()
         (Image.open(path).convert('RGB')))) for path in image_paths]
@@ -58,10 +57,12 @@ def main():
     rgb_gt = rgb_gt.cuda()/255.   
 
     layers = [2, 256, 256, 256, 256, 3]
+    pelyer = [10, 256, 256, 256, 256, 3]
     models = [
-                MLP(nn.ReLU, layers).cuda(), 
-                MLP(nn.Sigmoid, layers).cuda(),
-                MLP(nn.Tanh, layers).cuda(),
+                MLP(nn.ReLU,    layers, name='ReLU',          preprocess_fn=nn.Identity()).cuda(), 
+                MLP(nn.Sigmoid, layers, name='Sigmoid',       preprocess_fn=nn.Identity()).cuda(),
+                MLP(nn.Tanh,    layers, name='Tanh',          preprocess_fn=nn.Identity()).cuda(),
+                MLP(nn.ReLU,    pelyer, name='ReLU Pos.Embd', preprocess_fn=pos_encoding).cuda(),
             ]
     optimizers = [optim.AdamW(m.parameters(), lr=3e-3) for m in models]
 
