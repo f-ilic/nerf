@@ -29,6 +29,7 @@ conda env update --file environment.yaml --prune
 
 # Related literature
 * [BlockNerf](https://arxiv.org/pdf/2202.05263.pdf)
+* [Flame-In-Nerf](https://arxiv.org/pdf/2108.04913.pdf)
 
 # githubs 
 
