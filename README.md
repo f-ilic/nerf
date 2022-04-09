@@ -13,6 +13,12 @@ conda env update --file environment.yaml --prune
 ```
 
 
+## 2d toy problem:
+### Reconstruction with fewer parameters than image
+[1](toy/output_videos/smaller_net____100percent.mp4)
+[2](toy/output_videos/smaller_net____050percent.mp4)
+[3](toy/output_videos/smaller_net____010percent.mp4)
+[4](toy/output_videos/tiny_net____010percent_leakyReLU.mp4)
 
 
 

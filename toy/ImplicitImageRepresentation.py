@@ -1,9 +1,11 @@
+from multiprocessing.sharedctypes import Value
+from pyrsistent import b
 import torch
 import torch.nn as nn
 from itertools import tee
 from torch import nn, optim
 from PIL import Image
-from torchvision.transforms import PILToTensor, CenterCrop, Resize, Normalize
+from torchvision.transforms import PILToTensor, CenterCrop, Resize, Normalize, Compose
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from einops import rearrange
@@ -15,7 +17,7 @@ torch.pi = torch.acos(torch.zeros(1)).item() * 2
 
 def block(in_neurons, out_neurons, activation_fn):
     return nn.Sequential(
-        nn.Linear(in_neurons, out_neurons, bias=False),
+        nn.Linear(in_neurons, out_neurons),
         activation_fn()
     )
 
@@ -26,6 +28,9 @@ def sine_embedding(num_basis):
 
 def sine_cosine_embedding(num_basis):
     def f(x):
+        if num_basis % 2 == 1:
+            raise ValueError("num_basis must be even")
+
         s = torch.cat([torch.sin((2**i)*x*torch.pi) for i in range(num_basis//2)], dim=1)
         c = torch.cat([torch.cos((2**i)*x*torch.pi) for i in range(num_basis//2)], dim=1)
         return torch.cat([s,c], dim=1)
@@ -47,112 +52,116 @@ def inv_normalize(mean, std):
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, activation_fn, neurons, name, preprocess_fn) -> None:
+    def __init__(self, activation_fn, neurons, name, embedding_fn) -> None:
         torch.manual_seed(69)
         super(MLP, self).__init__()
         self.activation_fn = activation_fn
-        self.neurons = neurons
         self.name = name
-        self.preprocess_fn = preprocess_fn
-        self.net = nn.Sequential(*[block(i,o,self.activation_fn) for i,o in pairwise(self.neurons)])    
+        self.neurons = neurons
+        self.embedding_fn = embedding_fn
+        self.net = nn.Sequential(*[block(i,o,self.activation_fn) for i,o in pairwise(self.neurons)]) 
+        self.num_params =  sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def forward(self, x):
-        return self.net(self.preprocess_fn(x))
+        x = self.embedding_fn(x)
+        x = self.net(x)
+        return x
 
 def get_imgs(image_paths):
-    l = [
-        (Resize(130)
-        (CenterCrop(250)
-        (PILToTensor()
-        (Image.open(path).convert('RGB'))))) for path in image_paths]
-
-    l = torch.cat(l, dim=1).float()
-    return l
+    T = Compose([
+                PILToTensor(),
+                CenterCrop(250),
+                Resize(250)
+                ])
+    l = [ T(Image.open(path).convert('RGB')) for path in image_paths ]
+    return torch.cat(l, dim=1).float()
     
 
 def main():
     criterion = nn.MSELoss().cuda()
     rgb_gt = get_imgs([
-                    #    'toy/text.png',
-                        # 'toy/bin.png',
-                    #    'toy/markus.png',
-                    #    'toy/lydia.png',
-                       'toy/dominik.png',
-                    # 'toy/lion.png'
+                    #    'toy/input_images//text.png',
+                        # 'toy/input_images/bin.png',
+                       'toy/input_images/lydia.png',
+                       'toy/input_images/markus.png',
+                    #    'toy/input_images/dominik.png',
+                    # 'toy/input_images/lion.png'
                        ])
 
-    mean = torch.mean(rgb_gt, dim=(1,2))
-    std = torch.std(rgb_gt, dim=(1,2))
-    rgb_gt = Normalize(mean, std)(rgb_gt) # 3, h, w
-
-    embedding_dims = 10
-    use_subset = False
+    num_basis = 10
+    embedding_dims = 2 * num_basis
+    use_subset = True
+    subset_percent = 0.1
 
     c, h, w = rgb_gt.shape
-    rgb_gt = rearrange(rgb_gt, 'c h w -> (h w) c')
 
     y_grid, x_grid  = torch.meshgrid([torch.arange(w), torch.arange(h)])
-    grid = torch.stack([y_grid/h, x_grid/w], dim=2)
+    grid = torch.stack([x_grid/w, y_grid/h], dim=2)
 
-    grid = rearrange(grid, 'h w c -> (h w) c').cuda()
-    rgb_gt = rgb_gt.cuda()#/255.   
-    print(f'Image has {rearrange(rgb_gt, "a c -> (a c)").size(0)} Values')
+    xylayer= [2, 24, 24, 24, 3]
+    layers = [embedding_dims, 24, 24, 24, 3]
+    pelyer = [embedding_dims, 24, 24, 24, 3]
 
-    layers = [2, 256, 256, 256, 256, 3]
-    pelyer = [2*embedding_dims, 256, 256, 256, 256, 3]
     models = [
-                MLP(nn.ReLU,    layers, name=f'ReLU',              preprocess_fn=nn.Identity()                                 ).cuda(), 
-                # MLP(nn.Sigmoid, layers, name=f'Sigmoid',           preprocess_fn=nn.Identity()                                 ).cuda(),
-                MLP(nn.Tanh,    layers, name=f'Tanh',              preprocess_fn=nn.Identity()                                 ).cuda(),
-                MLP(nn.ReLU,    pelyer, name=f'ReLU pe sin',       preprocess_fn=sine_embedding(embedding_dims)                ).cuda(),
-                MLP(nn.ReLU,    pelyer, name=f'ReLU pe sin+cos',   preprocess_fn=sine_cosine_embedding(embedding_dims)         ).cuda(),
-                # MLP(nn.ReLU,    pelyer, name=f'ReLU sanity check', preprocess_fn=replicate_inputs_sanity_check(embedding_dims) ).cuda(),
+                MLP(nn.LeakyReLU,    xylayer,name=f'LeakyReLU',                 embedding_fn=nn.Identity()                                ).cuda(), 
+                MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU learn embedding', embedding_fn=block(2, embedding_dims, nn.LeakyReLU)            ).cuda(), 
+                MLP(nn.Sigmoid, layers, name=f'Sigmoid',              embedding_fn=block(2, embedding_dims, nn.Sigmoid)         ).cuda(),
+                MLP(nn.Tanh,    layers, name=f'Tanh',                 embedding_fn=block(2, embedding_dims, nn.Tanh)            ).cuda(),
+                MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU only xy coords',  embedding_fn=replicate_inputs_sanity_check(num_basis)).cuda(), 
+
+                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin',       embedding_fn=sine_embedding(num_basis)                ).cuda(),
+                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin+cos',   embedding_fn=sine_cosine_embedding(num_basis)         ).cuda(),
             ]
     optimizers = [optim.AdamW(m.parameters(), lr=3e-3) for m in models]
 
-    # print(f'Image has {rgb_gt.all.}')
 
+    grid   = rearrange(grid, 'w h c -> (h w) c').cuda()
+    rgb_gt = rearrange(rgb_gt, 'c h w -> (h w) c').cuda()/255.
+
+    #  --- Train with whole data or with subset which is randomly sampled once.
+    batchsize = rgb_gt.size(0)
+    perm = torch.randperm(batchsize)
+    if use_subset:
+        indices, unused = perm[:int(batchsize*(subset_percent))], perm[int(batchsize*(subset_percent)):]
+        rgb_gt_input = rgb_gt.clone()
+        rgb_gt_input = rgb_gt_input[indices]
+        grid_input = grid[indices]
+        
+
+        rgb_gt_input_displayable = rgb_gt.clone()
+        rgb_gt_input_displayable[unused]=0
+        rgb_gt_input_displayable = rgb_gt_input_displayable.reshape(h,w,c)
+    else:
+        grid_input = grid
+        rgb_gt_input = rgb_gt
+        rgb_gt_input_displayable = rgb_gt
+
+    #  --- Sanity check plots of input data
+    fig, axes = plt.subplots(1,len(models)+2, figsize=(16,5), sharex=True, sharey=True)    
+    [a.set_axis_off() for a in axes]
+    axes = axes.ravel()
+
+    im_axes = []
+    for ax, m in zip(axes[2:].ravel(), models):
+        im_axes.append(ax.imshow(np.zeros((h,w,c))))
+        ax.set_title(f'{m.name}\n{m.neurons}\n#Params: {m.num_params}', fontsize=8)
+
+    axes[0].imshow(rgb_gt.cpu().reshape(h,w,c))
+    axes[0].set_title(f'#Pixels: {rgb_gt.reshape(-1).size(0)}', fontsize=8)
+    axes[1].imshow(rgb_gt_input_displayable.cpu().reshape(h,w,c))
+    axes[1].set_title(f'#Pixels: {rgb_gt_input.reshape(-1).size(0)}', fontsize=8)
+
+    fig.tight_layout()
+    plt.show(block=False)
+
+
+    print(f'Image has {rgb_gt.reshape(-1).size(0)} values')
     print("number of parameters:")
     for m in models:
         print(f'{m.name}: {sum(p.numel() for p in m.parameters() if p.requires_grad)}', end='\t')
     print("")
 
-    
-    fig, axes = plt.subplots(1,len(models)+2, figsize=(16,5))
-    fig.tight_layout()
-    
-    
-    [a.set_axis_off() for a in axes]
-    axes = axes.ravel()
-    inv_T = inv_normalize(mean, std)
-    I = rgb_gt.cpu().reshape(h,w,c).permute(2,0,1)
-    axes[0].imshow(inv_T(I).permute(1,2,0)/255.)
-
-    im_axes = []
-    for ax, m in zip(axes[2:].ravel(), models):
-        im_axes.append(ax.imshow(np.zeros((h,w,c))))
-        ax.set_title(m.name)
-
-    
     epoch = 0
-    batchsize = rgb_gt.size(0)
-    perm = torch.randperm(batchsize)
-    if use_subset:
-        indices = perm[:batchsize//2]
-        unused_indices = perm[batchsize//2:]
-        rgb_gt[unused_indices] = 0
-        grid_input = grid[indices]
-        rgb_gt_input = rgb_gt[indices]
-    else:
-        grid_input = grid
-        rgb_gt_input = rgb_gt
-
-
-    I = rgb_gt.cpu().reshape(h,w,c).permute(2,0,1)
-    axes[1].imshow(inv_T(I).permute(1,2,0)/255.)
-    
-    plt.show(block=False)
-
     while(True):
         for model, optims, im_ax in zip(models, optimizers, im_axes):
             rgb_predict = model(grid_input)
@@ -162,8 +171,7 @@ def main():
             loss.backward()
             optims.step()
 
-            reco_image = model(grid).detach().cpu().reshape(h,w,c).clip(0,1).permute(2,0,1)
-            reco_image = inv_T(reco_image).permute(1,2,0)/255.
+            reco_image = model(grid).detach().cpu().reshape(h,w,c).clip(0,1)
             im_ax.set_data(reco_image)
             im_ax.axes.figure.canvas.draw()
 
@@ -173,6 +181,9 @@ def main():
 
         if is_print:                
             print(f'Epoch: {epoch:.2E}')
+
+        if epoch % 10 == 0:
+            fig.savefig(f'tiny_net____010percent/{epoch:05d}.png', format='png')
         epoch += 1
         fig.canvas.draw()
         fig.canvas.flush_events()
