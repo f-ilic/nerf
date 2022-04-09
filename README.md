@@ -14,15 +14,30 @@ conda env update --file environment.yaml --prune
 
 
 ## 2d toy problem:
+imgs -> gif:
+> ```cat *.png | ffmpeg -f image2pipe -stream_loop -1 -i - output.mp4```
+
+from mp4 -> gif:
+> ```for f in *.mp4; do ffmpeg -i $f -vf "fps=10,scale=720:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${f%.mp4}.gif"; done```
+
 ### Reconstruction with fewer parameters than image
 ![1](toy/output_videos/smaller_net____100percent.gif)
 ![2](toy/output_videos/smaller_net____050percent.gif)
 ![3](toy/output_videos/smaller_net____010percent.gif)
 
-LeakyReLU fixes 'saturation' or dead neurons problem.
+LeakyReLU fixes saturation issues (see red images). The networks shown next have almost NO capacity:
+`[20 24 24 24 3] -> 1800ish weights`. They have **10x** fewer parameters than all the networks above.
 ![4](toy/output_videos/tiny_net____010percent_leakyReLU.gif)
+It seems to come at a cost of reconstruction fidelity however.
+Comapare the following plos that shows ReLU vs LeakyRelU.
 
+Another Relu vs leakyRelu comparison where capacity of network much higher.
+![5](toy/output_videos/relu_vs_leakyrelu.gif)
 
+### Learned embeddings
+Also lets look at the embedding of 2->2 that is learned in both of these cases.
+
+### In loss have coarse and fine network
 
 # Resources
 
@@ -31,8 +46,8 @@ LeakyReLU fixes 'saturation' or dead neurons problem.
 * [Overview NeRF from one of the Authors (Barron)](https://www.youtube.com/watch?v=HfJpQCBTqZs)  - highly rewatchable good talk
 
 
-# My summary slides
-* [Problem statement, related problems, and original NeRF paper](https://googlelink)
+# My NERF reading group slides
+* [Slides1](https://files.icg.tugraz.at/f/8e753b931694420f9115/)
 
 
 # Related literature

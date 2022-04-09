@@ -90,7 +90,7 @@ def main():
 
     num_basis = 10
     embedding_dims = 2 * num_basis
-    use_subset = True
+    use_subset = False
     subset_percent = 0.1
 
     c, h, w = rgb_gt.shape
@@ -98,19 +98,24 @@ def main():
     y_grid, x_grid  = torch.meshgrid([torch.arange(w), torch.arange(h)])
     grid = torch.stack([x_grid/w, y_grid/h], dim=2)
 
-    xylayer= [2, 24, 24, 24, 3]
-    layers = [embedding_dims, 24, 24, 24, 3]
-    pelyer = [embedding_dims, 24, 24, 24, 3]
+    xylayer= [2, 64, 64, 64, 3]
+    layers = [embedding_dims, 64, 64, 64, 3]
+    pelyer = [embedding_dims, 64, 64, 64, 3]
 
     models = [
-                MLP(nn.LeakyReLU,    xylayer,name=f'LeakyReLU',                 embedding_fn=nn.Identity()                                ).cuda(), 
-                MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU learn embedding', embedding_fn=block(2, embedding_dims, nn.LeakyReLU)            ).cuda(), 
-                MLP(nn.Sigmoid, layers, name=f'Sigmoid',              embedding_fn=block(2, embedding_dims, nn.Sigmoid)         ).cuda(),
-                MLP(nn.Tanh,    layers, name=f'Tanh',                 embedding_fn=block(2, embedding_dims, nn.Tanh)            ).cuda(),
-                MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU only xy coords',  embedding_fn=replicate_inputs_sanity_check(num_basis)).cuda(), 
+                # MLP(nn.LeakyReLU,    xylayer,name=f'LeakyReLU',                 embedding_fn=nn.Identity()                                ).cuda(), 
+                MLP(nn.ReLU,    xylayer, name=f'ReLU pure', embedding_fn=nn.Identity()            ).cuda(), 
+                MLP(nn.ReLU,    layers, name=f'ReLU learn embed', embedding_fn=block(2, embedding_dims, nn.ReLU)            ).cuda(), 
 
-                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin',       embedding_fn=sine_embedding(num_basis)                ).cuda(),
-                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin+cos',   embedding_fn=sine_cosine_embedding(num_basis)         ).cuda(),
+                MLP(nn.LeakyReLU,    xylayer, name=f'LeakyReLU pure', embedding_fn=nn.Identity()            ).cuda(), 
+                MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU learn embed', embedding_fn=block(2, embedding_dims, nn.LeakyReLU)            ).cuda(), 
+
+                # MLP(nn.Sigmoid, layers, name=f'Sigmoid',              embedding_fn=block(2, embedding_dims, nn.Sigmoid)         ).cuda(),
+                # MLP(nn.Tanh,    layers, name=f'Tanh',                 embedding_fn=block(2, embedding_dims, nn.Tanh)            ).cuda(),
+                # MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU only xy coords',  embedding_fn=replicate_inputs_sanity_check(num_basis)).cuda(), 
+
+                # MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin',       embedding_fn=sine_embedding(num_basis)                ).cuda(),
+                # MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin+cos',   embedding_fn=sine_cosine_embedding(num_basis)         ).cuda(),
             ]
     optimizers = [optim.AdamW(m.parameters(), lr=3e-3) for m in models]
 
@@ -183,7 +188,10 @@ def main():
             print(f'Epoch: {epoch:.2E}')
 
         if epoch % 10 == 0:
-            fig.savefig(f'tiny_net____010percent/{epoch:05d}.png', format='png')
+            fig.savefig(f'toy/output/{epoch:05d}.png', format='png')
+            if epoch==4090:
+                break;
+
         epoch += 1
         fig.canvas.draw()
         fig.canvas.flush_events()
