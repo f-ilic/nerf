@@ -15,10 +15,12 @@ conda env update --file environment.yaml --prune
 
 ## 2d toy problem:
 ### Reconstruction with fewer parameters than image
-![1](toy/output_videos/smaller_net____100percent.webm)
-![2](toy/output_videos/smaller_net____050percent.webm)
-![3](toy/output_videos/smaller_net____010percent.webm)
-![4](toy/output_videos/tiny_net____010percent_leakyReLU.webm)
+![1](toy/output_videos/smaller_net____100percent.gif)
+![2](toy/output_videos/smaller_net____050percent.gif)
+![3](toy/output_videos/smaller_net____010percent.gif)
+
+LeakyReLU fixes 'saturation' or dead neurons problem.
+![4](toy/output_videos/tiny_net____010percent_leakyReLU.gif)
 
 
 
