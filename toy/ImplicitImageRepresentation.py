@@ -1,5 +1,4 @@
 from multiprocessing.sharedctypes import Value
-from pyrsistent import b
 import torch
 import torch.nn as nn
 from itertools import tee
@@ -71,7 +70,7 @@ def get_imgs(image_paths):
     T = Compose([
                 PILToTensor(),
                 CenterCrop(250),
-                Resize(250)
+                Resize(30)
                 ])
     l = [ T(Image.open(path).convert('RGB')) for path in image_paths ]
     return torch.cat(l, dim=1).float()
@@ -90,17 +89,17 @@ def main():
 
     num_basis = 10
     embedding_dims = 2 * num_basis
-    use_subset = False
-    subset_percent = 0.1
+    use_subset = True
+    subset_percent = 0.5
 
     c, h, w = rgb_gt.shape
 
     y_grid, x_grid  = torch.meshgrid([torch.arange(w), torch.arange(h)])
     grid = torch.stack([x_grid/w, y_grid/h], dim=2)
 
-    xylayer= [2, 64, 64, 64, 3]
-    layers = [embedding_dims, 64, 64, 64, 3]
-    pelyer = [embedding_dims, 64, 64, 64, 3]
+    xylayer= [2, 256, 256, 256, 3]
+    layers = [embedding_dims, 256, 256, 256, 3]
+    pelyer = [embedding_dims, 256, 256, 256, 3]
 
     models = [
                 # MLP(nn.LeakyReLU,    xylayer,name=f'LeakyReLU',                 embedding_fn=nn.Identity()                                ).cuda(), 
@@ -114,8 +113,8 @@ def main():
                 # MLP(nn.Tanh,    layers, name=f'Tanh',                 embedding_fn=block(2, embedding_dims, nn.Tanh)            ).cuda(),
                 # MLP(nn.LeakyReLU,    layers, name=f'LeakyReLU only xy coords',  embedding_fn=replicate_inputs_sanity_check(num_basis)).cuda(), 
 
-                # MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin',       embedding_fn=sine_embedding(num_basis)                ).cuda(),
-                # MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin+cos',   embedding_fn=sine_cosine_embedding(num_basis)         ).cuda(),
+                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin',       embedding_fn=sine_embedding(num_basis)                ).cuda(),
+                MLP(nn.LeakyReLU,    pelyer, name=f'LeakyReLU pe sin+cos',   embedding_fn=sine_cosine_embedding(num_basis)         ).cuda(),
             ]
     optimizers = [optim.AdamW(m.parameters(), lr=3e-3) for m in models]
 
@@ -187,10 +186,10 @@ def main():
         if is_print:                
             print(f'Epoch: {epoch:.2E}')
 
-        if epoch % 10 == 0:
-            fig.savefig(f'toy/output/{epoch:05d}.png', format='png')
-            if epoch==4090:
-                break;
+        # if epoch % 10 == 0:
+        #     fig.savefig(f'toy/output/{epoch:05d}.png', format='png')
+        #     if epoch==4090:
+        #         break;
 
         epoch += 1
         fig.canvas.draw()
