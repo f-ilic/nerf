@@ -98,7 +98,7 @@ def main():
     ])
     num_basis = 12
     embedding_dims = 2 * num_basis
-    use_subset = True
+    use_subset = False
     subset_percent = 0.5
 
     c, h, w = rgb_gt.shape
@@ -106,8 +106,8 @@ def main():
     y_grid, x_grid = torch.meshgrid([torch.arange(w), torch.arange(h)])
     grid = torch.stack([x_grid/w, y_grid/h], dim=2)
 
-    xylayer = [2, 256, 256, 256, 3]
-    layers = [embedding_dims, 256, 256, 256, 3]
+    xylayer = [2, 64, 64, 64, 64, 3]
+    layers = [embedding_dims, 64, 64, 64, 64, 3]
 
     models = [
         MLP(nn.Tanh,    layers, name=f'Tanh',                 embedding_fn=block(2, embedding_dims, nn.Tanh)            ).cuda(),
@@ -148,13 +148,13 @@ def main():
         rgb_gt_input_displayable = rgb_gt
 
     #  --- Sanity check plots of input data
-    loss_fig, metric_ax = plt.subplots(1, 3, figsize=(16,4))
+    metric_fig, metric_ax = plt.subplots(1, 3, figsize=(16,4))
     metric_ax = metric_ax.ravel()
     loss_plot = metric_ax[0].plot(np.empty((0, len(models))), np.empty((0, len(models))), label=[m.name for m in models])
     psnr_plot = metric_ax[1].plot(np.empty((0, len(models))), np.empty((0, len(models))), label=[m.name for m in models])
     ssim_plot = metric_ax[2].plot(np.empty((0, len(models))), np.empty((0, len(models))), label=[m.name for m in models])
 
-    metric_ax[0].set_title("Loss")
+    metric_ax[0].set_title("Loss");    metric_ax[0].set_yscale('log')
     metric_ax[1].set_title("PSNR")
     metric_ax[2].set_title("SSIM")
     [ma.legend(loc='best') for ma in metric_ax]
@@ -226,12 +226,18 @@ def main():
         if is_print:
             print(f'Epoch: {epoch:.2E}')
 
-        epoch += 1
         fig.canvas.draw()
         fig.canvas.flush_events()
 
-        loss_fig.canvas.draw()
-        loss_fig.canvas.flush_events()
+        metric_fig.canvas.draw()
+        metric_fig.canvas.flush_events()
+
+        if epoch % 15 == 0:
+            fig.savefig(f'toy/output/lion/imgs/{epoch:06d}.png', format='png')
+            metric_fig.savefig(f'toy/output/lion/metrics/{epoch:06d}.png', format='png')
+            if epoch==50000:
+                break;
+        epoch += 1
 
 
 if __name__ == "__main__":

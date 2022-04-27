@@ -1,4 +1,4 @@
-# Setup
+github.com:f-ilic/nerf.git# Setup
 
 ## Anaconda first time setup
 ```
@@ -36,6 +36,15 @@ Another Relu vs leakyRelu comparison where capacity of network much higher.
 
 ### Learned embeddings
 Also lets look at the embedding of 2->2 that is learned in both of these cases.
+
+
+
+## Reproducing some results from https://www.matthewtancik.com/nerf
+
+![5](toy/output/lion/img_output.gif)
+![5](toy/output/lion/metrics_output.gif)
+
+
 
 ### In loss have coarse and fine network
 
